@@ -9,6 +9,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static java.awt.Color.*;
 import static javax.swing.SwingConstants.CENTER;
 
 public class Sudoku extends JFrame {
@@ -47,11 +48,11 @@ public class Sudoku extends JFrame {
     private JTextField[][] shell;
     private JLabel status;
     private static final int SUBSQUARE_BORDER_WIDTH = 5, CELL_X = 60, CELL_Y = 60;
-    private static final Color BORDER_COLOR = Color.BLACK;
+    private static final Color BORDER_COLOR = BLACK;
 
     private Sudoku(int rows, int columns) {
         this(rows, columns, -1,
-                new Color[]{Color.CYAN, Color.YELLOW, Color.RED, Color.WHITE},
+                new Color[]{CYAN, YELLOW, RED, WHITE},
                 0.2);
     }
 
@@ -108,16 +109,20 @@ public class Sudoku extends JFrame {
         status.setBorder(BorderFactory.createMatteBorder(
                 SUBSQUARE_BORDER_WIDTH, SUBSQUARE_BORDER_WIDTH,
                 SUBSQUARE_BORDER_WIDTH, SUBSQUARE_BORDER_WIDTH, BORDER_COLOR));
-        panel.setSize(width + SUBSQUARE_BORDER_WIDTH * (subGridSize - 1), height + SUBSQUARE_BORDER_WIDTH * (subGridSize - 1));
-        panel.setLayout(new GridLayout(rows / subGridSize, columns / subGridSize));
-        superPanel.setSize(panel.getWidth(), panel.getHeight() +
-                (status.getFont().getSize() + 2 * SUBSQUARE_BORDER_WIDTH));
+        panel.setSize(
+                width + SUBSQUARE_BORDER_WIDTH * (subGridSize - 1),
+                height + SUBSQUARE_BORDER_WIDTH * (subGridSize - 1));
+        panel.setLayout(new GridLayout(
+                rows / subGridSize,
+                columns / subGridSize));
+        superPanel.setSize(
+                panel.getWidth(),
+                panel.getHeight() + (status.getFont().getSize() + 2 * SUBSQUARE_BORDER_WIDTH));
         superPanel.setLayout(new BorderLayout());
         setSize(superPanel.getWidth(), superPanel.getHeight());
         setTitle("Sudoku");
         status.setOpaque(true);
-        status.setBackground(Color.WHITE);
-        status.setText("Let's start!");
+        updateStatus(WHITE, "Let's start!");
         for (int i = 0; i < rows / subGridSize; ++i) {
             for (int j = 0; j < columns / subGridSize; ++j) {
                 JPanel subPanel = new JPanel();
@@ -388,43 +393,53 @@ public class Sudoku extends JFrame {
                     if (valid(board, rowIndex, columnIndex, false, false)) {
                         ++validCount;
                     } else if (board[rowIndex][columnIndex] != null && board[rowIndex][columnIndex].value != 0) {
-                        shell[rowIndex][columnIndex].setBackground(Color.DARK_GRAY);
+                        shell[rowIndex][columnIndex].setBackground(DARK_GRAY);
                     }
                 }
             }
             boolean allValid = validCount == (rows * columns);
             if (allValid) {
-                status.setBackground(Color.GREEN);
-                status.setText(autoSolved ? message : "Congratulations! You have completed the game!");
+                updateStatus(GREEN, autoSolved ? message : "Congratulations! You have completed the game!");
             } else {
-                status.setBackground(Color.ORANGE);
-                status.setText("Sorry! Try Again.");
+                updateStatus(ORANGE, "Sorry! Try Again.");
             }
             return allValid;
         } else {
-            status.setBackground(Color.RED);
-            status.setText("Illegal numbers are present in the grid");
+            updateStatus(RED, "Illegal numbers are present in the grid");
             return false;
         }
     }
 
-    private void save() throws IOException {
-        ObjectOutputStream outputStream = new ObjectOutputStream(new FileOutputStream(SAVE_FILE_NAME));
-        outputStream.writeObject(this);
-        status.setBackground(Color.YELLOW);
-        status.setText("The game was saved.");
+    private void updateStatus(Color background, String message) {
+        status.setBackground(background);
+        status.setText(message);
     }
 
-    private void restore() throws IOException, ClassNotFoundException {
-        ObjectInputStream inputStream = new ObjectInputStream(new FileInputStream(SAVE_FILE_NAME));
-        Sudoku save = (Sudoku) inputStream.readObject();
-        for (int i = 0; i < this.board.length; i++)
-            System.arraycopy(save.board[i], 0, this.board[i], 0, this.board[i].length);
-        for (int i = 0; i < this.shell.length; i++)
-            System.arraycopy(save.shell[i], 0, this.shell[i], 0, this.shell[i].length);
-        paintSudoku(false);
-        status.setBackground(Color.YELLOW);
-        status.setText("The game was Restored.");
+    private void save() {
+        try {
+            ObjectOutputStream outputStream = new ObjectOutputStream(new FileOutputStream(SAVE_FILE_NAME));
+            outputStream.writeObject(this);
+            updateStatus(YELLOW, "The game was saved.");
+        } catch (IOException e) {
+            updateStatus(RED, "Saving game failed.");
+            e.printStackTrace();
+        }
+    }
+
+    private void restore() {
+        try {
+            ObjectInputStream inputStream = new ObjectInputStream(new FileInputStream(SAVE_FILE_NAME));
+            Sudoku save = (Sudoku) inputStream.readObject();
+            for (int i = 0; i < this.board.length; i++)
+                System.arraycopy(save.board[i], 0, this.board[i], 0, this.board[i].length);
+            for (int i = 0; i < this.shell.length; i++)
+                System.arraycopy(save.shell[i], 0, this.shell[i], 0, this.shell[i].length);
+            paintSudoku(false);
+            updateStatus(YELLOW, "The game was Restored.");
+        } catch (ClassNotFoundException | IOException e) {
+            updateStatus(RED, "Restoring game failed.");
+            e.printStackTrace();
+        }
     }
 
     private void initComponents() {
@@ -464,7 +479,7 @@ public class Sudoku extends JFrame {
         clearHints.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0));
         menu.add(clearHints);
         solve.setText("Solve");
-        solve.addActionListener(event -> solve(true));
+        solve.addActionListener(event -> solve());
         solve.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
         menu.add(solve);
         done.setText("Done");
@@ -472,23 +487,11 @@ public class Sudoku extends JFrame {
         done.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
         menu.add(done);
         save.setText("Save");
-        save.addActionListener(event -> {
-            try {
-                save();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+        save.addActionListener(event -> save());
         save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK));
         menu.add(save);
         reload.setText("Restore");
-        reload.addActionListener(event -> {
-            try {
-                restore();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
+        reload.addActionListener(event -> restore());
         reload.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0));
         menu.add(reload);
         exit.setText("Exit");
@@ -503,22 +506,16 @@ public class Sudoku extends JFrame {
         pack();
     }
 
-    @SuppressWarnings("SameParameterValue")
-    private boolean solve(boolean log) {
+    private boolean solve() {
         //printGrid();
-        if (solve(board, 0, 0)) {
-            if (log) {
-                paintSudoku(true);
-                checkBoardValidity("Solved", true);
-            }
-            return true;
+        boolean solutionExists = solve(board, 0, 0);
+        if (solutionExists) {
+            paintSudoku(true);
+            checkBoardValidity("Solved", true);
         } else {
-            if (log) {
-                status.setBackground(Color.RED);
-                status.setText("No solution");
-            }
-            return false;
+            updateStatus(RED, "No solution");
         }
+        return solutionExists;
     }
 
     private boolean solve(Cell[][] board, int i, int j) {
@@ -540,5 +537,4 @@ public class Sudoku extends JFrame {
         }
         return false;
     }
-
 }
