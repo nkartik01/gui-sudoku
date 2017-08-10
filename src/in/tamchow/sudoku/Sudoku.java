@@ -15,6 +15,18 @@ public class Sudoku extends JFrame {
 
     private static final String SAVE_FILE_NAME = "Sudoku.sav";
 
+    public Set<Integer> getAllowedValues() {
+        return allowedValues;
+    }
+
+    @SuppressWarnings("WeakerAccess")
+    public void setAllowedValues(Set<Integer> allowedValues) {
+        if (allowedValues == null) {
+            allowedValues = new LinkedHashSet<>();
+        }
+        this.allowedValues = allowedValues;
+    }
+
     private static class Cell {
         private final int value;
         private final boolean fixed;
@@ -28,7 +40,7 @@ public class Sudoku extends JFrame {
     private static final long serialVersionUID = 1L;
     private Cell[][] board;
     private int width, height, rows, columns, subGridSize;
-    private int minElementValue, maxElementValue;
+    private Set<Integer> allowedValues;
     private double difficulty;
     private int lowerFillLimit, upperFillLimit;
     private Color colorBackgroundA, colorBackgroundB, colorForegroundA, colorForegroundB;
@@ -36,7 +48,6 @@ public class Sudoku extends JFrame {
     private JLabel status;
     private static final int SUBSQUARE_BORDER_WIDTH = 5, CELL_X = 60, CELL_Y = 60;
     private static final Color BORDER_COLOR = Color.BLACK;
-    private Set<Integer> legalValues;
 
     private Sudoku(int rows, int columns) {
         this(rows, columns, -1,
@@ -57,11 +68,12 @@ public class Sudoku extends JFrame {
         width = this.rows * (CELL_X + (SUBSQUARE_BORDER_WIDTH / (this.subGridSize - 1)));
         height = this.columns * (CELL_Y + (SUBSQUARE_BORDER_WIDTH / (this.subGridSize - 1)));
         this.difficulty = difficulty < 0.0 ? 0.0 : (difficulty > 1 ? 1.0 : difficulty);
-        maxElementValue = this.subGridSize * this.subGridSize;
-        minElementValue = 1;
+        int maxElementValue = this.subGridSize * this.subGridSize;
+        int minElementValue = 1;
+        setAllowedValues(IntStream.rangeClosed(minElementValue, maxElementValue)
+                .boxed().collect(Collectors.toCollection(LinkedHashSet::new)));
         lowerFillLimit = 2 * Math.max(rows, columns);
         upperFillLimit = (rows * columns) / 2;
-        legalValues = IntStream.rangeClosed(minElementValue, maxElementValue).boxed().collect(Collectors.toSet());
 
         colorBackgroundA = colors[0];
         colorBackgroundB = colors[1];
@@ -152,11 +164,11 @@ public class Sudoku extends JFrame {
                 Set<Integer> triedValues = new HashSet<>();
                 int value = 0;
                 do {
-                    if (triedValues.containsAll(legalValues)) {
+                    if (triedValues.containsAll(allowedValues)) {
                         System.out.println("Recursion, invalid position.");
                         initSudoku();
                     } else {
-                        value = random().nextInt(maxElementValue) + minElementValue;
+                        value = randomElement(allowedValues).orElseThrow(() -> new IllegalStateException("Set of allowed values is empty."));
                         triedValues.add(value);
                         System.out.println("Entering value = " + value + " at (" + probableRow + ", " + probableColumn + ").");
                     }
@@ -176,6 +188,24 @@ public class Sudoku extends JFrame {
         } else {
             paintSudoku(true);
         }
+    }
+
+    /**
+     * @param set a Set in which to look for a random element
+     * @param <T> generic type of the Set elements
+     * @return a random element in the Set or null if the set is empty
+     */
+    private <T> Optional<T> randomElement(Set<T> set) {
+        int size = set.size();
+        int itemIndex = new Random().nextInt(size);
+        int i = 0;
+        for (T element : set) {
+            if (i == itemIndex) {
+                return Optional.of(element);
+            }
+            ++i;
+        }
+        return Optional.empty();
     }
 
     private void copy(Cell[][] source, Cell[][] destination) {
@@ -276,7 +306,7 @@ public class Sudoku extends JFrame {
     }
 
     private boolean isLegal(Cell[][] board, int rowIndex, int columnIndex) {
-        return board[rowIndex][columnIndex] != null && board[rowIndex][columnIndex].value >= minElementValue && board[rowIndex][columnIndex].value <= maxElementValue;
+        return board[rowIndex][columnIndex] != null && allowedValues.contains(board[rowIndex][columnIndex].value);
     }
 
     private boolean verifyNumbers() {
@@ -288,7 +318,7 @@ public class Sudoku extends JFrame {
                 } else if (!isFixed(rowIndex, columnIndex)) {
                     board[rowIndex][columnIndex] = new Cell(0, false);
                 }
-                if (board[rowIndex][columnIndex].value < 0 || board[rowIndex][columnIndex].value > maxElementValue) {
+                if (!isLegal(rowIndex, columnIndex)) {
                     return false;
                 }
             }
@@ -363,43 +393,38 @@ public class Sudoku extends JFrame {
                 }
             }
             boolean allValid = validCount == (rows * columns);
-            if (allValid && !autoSolved) {
+            if (allValid) {
                 status.setBackground(Color.GREEN);
-                status.setText("Congratulations! You have completed the game");
-                return true;
-            } else if (allValid) {
-                status.setBackground(Color.GREEN);
-                status.setText(message);
-                return true;
+                status.setText(autoSolved ? message : "Congratulations! You have completed the game!");
             } else {
                 status.setBackground(Color.ORANGE);
                 status.setText("Sorry! Try Again.");
-                return false;
             }
+            return allValid;
         } else {
             status.setBackground(Color.RED);
-            status.setText("You have entered an illegal number");
+            status.setText("Illegal numbers are present in the grid");
             return false;
         }
     }
 
     private void save() throws IOException {
-        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(SAVE_FILE_NAME));
-        oos.writeObject(this);
+        ObjectOutputStream outputStream = new ObjectOutputStream(new FileOutputStream(SAVE_FILE_NAME));
+        outputStream.writeObject(this);
         status.setBackground(Color.YELLOW);
-        status.setText("This game was saved.");
+        status.setText("The game was saved.");
     }
 
     private void restore() throws IOException, ClassNotFoundException {
-        ObjectInputStream oos = new ObjectInputStream(new FileInputStream(SAVE_FILE_NAME));
-        Sudoku save = (Sudoku) oos.readObject();
+        ObjectInputStream inputStream = new ObjectInputStream(new FileInputStream(SAVE_FILE_NAME));
+        Sudoku save = (Sudoku) inputStream.readObject();
         for (int i = 0; i < this.board.length; i++)
             System.arraycopy(save.board[i], 0, this.board[i], 0, this.board[i].length);
         for (int i = 0; i < this.shell.length; i++)
             System.arraycopy(save.shell[i], 0, this.shell[i], 0, this.shell[i].length);
         paintSudoku(false);
         status.setBackground(Color.YELLOW);
-        status.setText("This game was Restored.");
+        status.setText("The game was Restored.");
     }
 
     private void initComponents() {
@@ -504,7 +529,7 @@ public class Sudoku extends JFrame {
             i += 1;
         }
         if (board[i][j] != null && (board[i][j].fixed || board[i][j].value > 0)) return solve(board, i, j + 1);
-        for (int trialValue = minElementValue; trialValue <= maxElementValue; ++trialValue) {
+        for (int trialValue : allowedValues) {
             if (valid(board, trialValue, i, j, false, true)) {
                 board[i][j] = new Cell(trialValue, false);
                 if (solve(board, i, j + 1))
